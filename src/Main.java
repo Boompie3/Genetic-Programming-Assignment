@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 public class Main {
     static class ResultMetrics {
@@ -12,7 +13,7 @@ public class Main {
         double testAccuracy;
         double fMeasure;
         long runtimeNs;
-        
+
         ResultMetrics(double trainAccuracy, double testAccuracy, double fMeasure, long runtimeNs) {
             this.trainAccuracy = trainAccuracy;
             this.testAccuracy = testAccuracy;
@@ -20,31 +21,40 @@ public class Main {
             this.runtimeNs = runtimeNs;
         }
     }
-    
+
     public static void main(String[] args) {
         System.out.println("=== GP Breast Cancer Classifier: 30-Run Batch Comparison ===\n");
-        
+
         String trainPath = "../Breast_train.csv";
         String testPath = "../Breast_test.csv";
-        
+
         if (args.length >= 1) trainPath = args[0];
         if (args.length >= 2) testPath = args[1];
-        
+
         System.out.println("Training File: " + trainPath);
         System.out.println("Test File:     " + testPath);
-        
+
+        Scanner scanner = new Scanner(System.in);
+
+        // Prompt for seed value
+        System.out.print("\nEnter base seed value: ");
+        long baseSeed = scanner.nextLong();
+
         try {
-            run30ComparisonAuto(trainPath, testPath);
+            run30ComparisonAuto(trainPath, testPath, baseSeed);
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());
             e.printStackTrace();
         }
+
+        scanner.close();
     }
 
-    private static void run30ComparisonAuto(String trainPath, String testPath) throws Exception {
+    private static void run30ComparisonAuto(String trainPath, String testPath, long baseSeed) throws Exception {
         System.out.println("\n=== Loading Data ===");
         DataLoader trainData = new DataLoader(trainPath);
         DataLoader testData = new DataLoader(testPath);
+
         System.out.println("Training samples: " + trainData.labels.length);
         System.out.println("Test samples: " + testData.labels.length);
 
@@ -53,40 +63,56 @@ public class Main {
 
         System.out.println("\n=== Running Symbolic (Arithmetic) 30 times ===");
         for (int i = 1; i <= 30; i++) {
-            long seed = 1000 + i;
+
+            // Uses user-entered base seed
+            long seed = baseSeed + i;
+
             GPEngine engine = new GPEngine(seed, trainData, false);
             engine.run(true);
-            
+
             Node model = loadModel("best_model.ser");
+
             long evalStart = System.nanoTime();
             ResultMetrics testMetrics = computeMetrics(model, trainData, testData, false);
             long evalTime = System.nanoTime() - evalStart;
-            
+
             testMetrics.trainAccuracy = engine.getLastTrainAccuracy();
             testMetrics.runtimeNs = evalTime;
+
             symbolicResults.add(testMetrics);
-            
-            if (i % 10 == 0) System.out.println("  Progress: " + i + "/30");
+
+            if (i % 10 == 0) {
+                System.out.println("  Progress: " + i + "/30");
+            }
         }
+
         System.out.println("  Progress: 30/30 ✓");
 
         System.out.println("\n=== Running Logical (Decision Tree) 30 times ===");
         for (int i = 1; i <= 30; i++) {
-            long seed = 2000 + i;
+
+            // Offset logical seeds so they differ from symbolic
+            long seed = (baseSeed + 1000) + i;
+
             GPEngine engine = new GPEngine(seed, trainData, true);
             engine.run(true);
-            
+
             Node model = loadModel("best_model.ser");
+
             long evalStart = System.nanoTime();
             ResultMetrics testMetrics = computeMetrics(model, trainData, testData, true);
             long evalTime = System.nanoTime() - evalStart;
-            
+
             testMetrics.trainAccuracy = engine.getLastTrainAccuracy();
             testMetrics.runtimeNs = evalTime;
+
             logicalResults.add(testMetrics);
-            
-            if (i % 10 == 0) System.out.println("  Progress: " + i + "/30");
+
+            if (i % 10 == 0) {
+                System.out.println("  Progress: " + i + "/30");
+            }
         }
+
         System.out.println("  Progress: 30/30 ✓");
 
         printComparisonTable(symbolicResults, logicalResults);
@@ -96,7 +122,7 @@ public class Main {
         double[] symbolicTrain = new double[symbolic.size()];
         double[] symbolicTest = new double[symbolic.size()];
         double[] symbolicF = new double[symbolic.size()];
-        
+
         double[] logicalTrain = new double[logical.size()];
         double[] logicalTest = new double[logical.size()];
         double[] logicalF = new double[logical.size()];
@@ -106,6 +132,7 @@ public class Main {
             symbolicTest[i] = symbolic.get(i).testAccuracy;
             symbolicF[i] = symbolic.get(i).fMeasure;
         }
+
         for (int i = 0; i < logical.size(); i++) {
             logicalTrain[i] = logical.get(i).trainAccuracy;
             logicalTest[i] = logical.get(i).testAccuracy;
@@ -115,7 +142,7 @@ public class Main {
         double symbolicTrainMean = mean(symbolicTrain);
         double symbolicTestMean = mean(symbolicTest);
         double symbolicFMean = mean(symbolicF);
-        
+
         double logicalTrainMean = mean(logicalTrain);
         double logicalTestMean = mean(logicalTest);
         double logicalFMean = mean(logicalF);
@@ -123,87 +150,180 @@ public class Main {
         double symbolicTrainStd = std(symbolicTrain);
         double symbolicTestStd = std(symbolicTest);
         double symbolicFStd = std(symbolicF);
-        
+
         double logicalTrainStd = std(logicalTrain);
         double logicalTestStd = std(logicalTest);
         double logicalFStd = std(logicalF);
 
         System.out.println("\n\n======================== COMPARISON TABLE (30 runs) ========================");
-        System.out.println(String.format("%-30s | %10s | %10s | %10s", "Metric", "Symbolic", "Logical", "Difference"));
+        System.out.println(String.format("%-30s | %10s | %10s | %10s",
+                "Metric", "Symbolic", "Logical", "Difference"));
+
         System.out.println("------------------------------------------------------------------------");
-        System.out.println(String.format("Training Accuracy (%%)   | %8.2f%% | %8.2f%% | %8.2f%%", 
-            symbolicTrainMean, logicalTrainMean, Math.abs(symbolicTrainMean - logicalTrainMean)));
-        System.out.println(String.format("  ± Std Dev             | ±%7.2f%% | ±%7.2f%% |", symbolicTrainStd, logicalTrainStd));
+
+        System.out.println(String.format(
+                "Training Accuracy (%%)   | %8.2f%% | %8.2f%% | %8.2f%%",
+                symbolicTrainMean,
+                logicalTrainMean,
+                Math.abs(symbolicTrainMean - logicalTrainMean)));
+
+        System.out.println(String.format(
+                "  ± Std Dev             | ±%7.2f%% | ±%7.2f%% |",
+                symbolicTrainStd,
+                logicalTrainStd));
+
         System.out.println("");
-        System.out.println(String.format("Test Accuracy (%%)       | %8.2f%% | %8.2f%% | %8.2f%%",
-            symbolicTestMean, logicalTestMean, Math.abs(symbolicTestMean - logicalTestMean)));
-        System.out.println(String.format("  ± Std Dev             | ±%7.2f%% | ±%7.2f%% |", symbolicTestStd, logicalTestStd));
+
+        System.out.println(String.format(
+                "Test Accuracy (%%)       | %8.2f%% | %8.2f%% | %8.2f%%",
+                symbolicTestMean,
+                logicalTestMean,
+                Math.abs(symbolicTestMean - logicalTestMean)));
+
+        System.out.println(String.format(
+                "  ± Std Dev             | ±%7.2f%% | ±%7.2f%% |",
+                symbolicTestStd,
+                logicalTestStd));
+
         System.out.println("");
-        System.out.println(String.format("F-measure               | %8.4f  | %8.4f  | %8.4f",
-            symbolicFMean, logicalFMean, Math.abs(symbolicFMean - logicalFMean)));
-        System.out.println(String.format("  ± Std Dev             | ±%7.4f  | ±%7.4f  |", symbolicFStd, logicalFStd));
+
+        System.out.println(String.format(
+                "F-measure               | %8.4f  | %8.4f  | %8.4f",
+                symbolicFMean,
+                logicalFMean,
+                Math.abs(symbolicFMean - logicalFMean)));
+
+        System.out.println(String.format(
+                "  ± Std Dev             | ±%7.4f  | ±%7.4f  |",
+                symbolicFStd,
+                logicalFStd));
+
         System.out.println("=========================================================================\n");
 
         double tStatistic = tTest(symbolicTest, logicalTest);
-        System.out.println(String.format("T-test on Test Accuracy: t = %.4f", tStatistic));
+
+        System.out.println(String.format(
+                "T-test on Test Accuracy: t = %.4f",
+                tStatistic));
+
         System.out.println("(Two-tailed significance test between Symbolic and Logical)\n");
     }
 
     private static double mean(double[] values) {
         double sum = 0;
-        for (double v : values) sum += v;
+
+        for (double v : values) {
+            sum += v;
+        }
+
         return sum / values.length;
     }
 
     private static double std(double[] values) {
         double m = mean(values);
         double sumSq = 0;
-        for (double v : values) sumSq += (v - m) * (v - m);
+
+        for (double v : values) {
+            sumSq += (v - m) * (v - m);
+        }
+
         return Math.sqrt(sumSq / values.length);
     }
 
     private static double tTest(double[] group1, double[] group2) {
         double mean1 = mean(group1);
         double mean2 = mean(group2);
+
         double std1 = std(group1);
         double std2 = std(group2);
+
         double pooledStd = Math.sqrt((std1 * std1 + std2 * std2) / 2.0);
-        double se = pooledStd * Math.sqrt(1.0 / group1.length + 1.0 / group2.length);
+
+        double se = pooledStd *
+                Math.sqrt(1.0 / group1.length + 1.0 / group2.length);
+
         return se > 0 ? (mean1 - mean2) / se : 0;
     }
 
-    private static ResultMetrics computeMetrics(Node model, DataLoader trainData, DataLoader testData, boolean isLogical) {
+    private static ResultMetrics computeMetrics(
+            Node model,
+            DataLoader trainData,
+            DataLoader testData,
+            boolean isLogical) {
+
         int trainCorrect = 0;
+
         for (int i = 0; i < trainData.labels.length; i++) {
             double out = model.evaluate(trainData.features[i]);
-            int pred = (isLogical ? (out > 0.5) : (1.0 / (1.0 + Math.exp(-out)) > 0.5)) ? 1 : 0;
-            if (pred == trainData.labels[i]) trainCorrect++;
+
+            int pred =
+                    (isLogical
+                            ? (out > 0.5)
+                            : (1.0 / (1.0 + Math.exp(-out)) > 0.5))
+                            ? 1
+                            : 0;
+
+            if (pred == trainData.labels[i]) {
+                trainCorrect++;
+            }
         }
-        double trainAccuracy = ((double) trainCorrect / trainData.labels.length) * 100.0;
+
+        double trainAccuracy =
+                ((double) trainCorrect / trainData.labels.length) * 100.0;
 
         int tp = 0, tn = 0, fp = 0, fn = 0;
+
         long start = System.nanoTime();
+
         for (int i = 0; i < testData.labels.length; i++) {
             double out = model.evaluate(testData.features[i]);
-            int pred = (isLogical ? (out > 0.5) : (1.0 / (1.0 + Math.exp(-out)) > 0.5)) ? 1 : 0;
+
+            int pred =
+                    (isLogical
+                            ? (out > 0.5)
+                            : (1.0 / (1.0 + Math.exp(-out)) > 0.5))
+                            ? 1
+                            : 0;
+
             int actual = testData.labels[i];
+
             if (actual == 1 && pred == 1) tp++;
             else if (actual == 0 && pred == 1) fp++;
             else if (actual == 0 && pred == 0) tn++;
             else fn++;
         }
+
         long end = System.nanoTime();
 
-        double testAccuracy = ((double) (tp + tn) / testData.labels.length) * 100.0;
-        double precision = (tp + fp == 0) ? 0.0 : (double) tp / (tp + fp);
-        double recall = (tp + fn == 0) ? 0.0 : (double) tp / (tp + fn);
-        double fMeasure = (precision + recall == 0) ? 0.0 : 2.0 * (precision * recall) / (precision + recall);
+        double testAccuracy =
+                ((double) (tp + tn) / testData.labels.length) * 100.0;
 
-        return new ResultMetrics(trainAccuracy, testAccuracy, fMeasure, end - start);
+        double precision =
+                (tp + fp == 0)
+                        ? 0.0
+                        : (double) tp / (tp + fp);
+
+        double recall =
+                (tp + fn == 0)
+                        ? 0.0
+                        : (double) tp / (tp + fn);
+
+        double fMeasure =
+                (precision + recall == 0)
+                        ? 0.0
+                        : 2.0 * (precision * recall) / (precision + recall);
+
+        return new ResultMetrics(
+                trainAccuracy,
+                testAccuracy,
+                fMeasure,
+                end - start);
     }
 
     private static Node loadModel(String modelPath) throws Exception {
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(modelPath))) {
+        try (ObjectInputStream ois =
+                     new ObjectInputStream(new FileInputStream(modelPath))) {
+
             return (Node) ois.readObject();
         }
     }
