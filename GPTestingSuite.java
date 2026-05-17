@@ -132,8 +132,9 @@ public class GPTestingSuite {
                 // Decision trees natively output direct classification target paths (0.0 or 1.0)
                 finalPrediction = (expressionOutput >= 0.5) ? 1 : 0;
             } else {
-                // Arithmetic classifiers map outcomes around functional thresholds (>= 0 is class 1)
-                finalPrediction = (expressionOutput >= 0.0) ? 1 : 0;
+                // Keep arithmetic testing consistent with training-time classification.
+                double sigmoid = 1.0 / (1.0 + Math.exp(-expressionOutput));
+                finalPrediction = (sigmoid > 0.5) ? 1 : 0;
             }
 
             // Confusion matrix calculation loop
