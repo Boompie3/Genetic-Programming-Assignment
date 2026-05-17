@@ -300,7 +300,3 @@ Breast Cancer Wisconsin Dataset
 - Statistical Analysis
 
 ---
-
-# Author
-
-COS314 Assignment 3
