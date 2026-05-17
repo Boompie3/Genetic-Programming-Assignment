@@ -1,61 +1,146 @@
-# GP Breast Cancer Classifier - Execution Guide
+\# GP Breast Cancer Classifier
 
-## Quick Start
+A Java-based Genetic Programming system for binary classification on the Breast Cancer Wisconsin Dataset.
 
-### Prerequisites
-- Java 8 or higher installed
-- Training data: `../Breast_train.csv` (297 samples, 9 features)
-- Test data: `../Breast_test.csv` (86 samples, 9 features)
+The program automatically performs a **30-run comparative experiment** between:
 
-### Basic Execution (Default Paths)
+- **Symbolic GP (Arithmetic Classifier)**
+- **Logical GP (Decision Tree Classifier)**
+
+and generates statistical performance comparisons including:
+
+- Training Accuracy
+- Test Accuracy
+- F-measure
+- Standard Deviation
+- Two-tailed T-test
+
+---
+
+# Requirements
+
+- Java 8 or higher
+- Executable JAR file:
+  - `GPClassifier.jar`
+- Dataset files:
+  - `Breast_train.csv`
+  - `Breast_test.csv`
+
+Check Java installation:
 
 ```bash
-cd Genetic-Programming-Assignment/src
-javac *.java
-java Main
+java -version
 ```
 
-**Output**: 30-run comparison table (Symbolic vs Logical GP) in terminal
+---
 
-### Custom Data Paths
+# Project Structure
+
+Place all files in the same directory:
+
+```text
+GPClassifier.jar
+Breast_train.csv
+Breast_test.csv
+README.md
+```
+
+---
+
+# Running the Program
+
+## Default Execution
+
+Run the JAR:
 
 ```bash
-java Main /path/to/train.csv /path/to/test.csv
+java -jar GPClassifier.jar
+```
+
+The program automatically loads:
+
+```text
+Breast_train.csv
+Breast_test.csv
+```
+
+---
+
+# Seed Prompt
+
+When execution starts, the program prompts for a base seed value:
+
+```text
+Enter base seed value:
 ```
 
 Example:
+
+```text
+Enter base seed value: 1000
+```
+
+The program then automatically generates seeds for all 30 runs.
+
+Example using base seed `1000`:
+
+## Symbolic GP Seeds
+
+```text
+1001 → 1030
+```
+
+## Logical GP Seeds
+
+```text
+2001 → 2030
+```
+
+---
+
+# Using Custom Dataset Paths
+
+You can provide custom CSV paths:
+
 ```bash
-java Main ../Breast_train.csv ../Breast_test.csv
-java Main ~/data/training.csv ~/data/testing.csv
+java -jar GPClassifier.jar /path/to/train.csv /path/to/test.csv
 ```
 
-## What It Does
+Example:
 
-The executable automatically runs a **30-iteration batch experiment**:
-
-1. **Symbolic GP (Arithmetic Classifier)** × 30 runs
-   - Seeds: 1001-1030
-   - Operators: +, −, ×, ÷
-   - Evolves arithmetic expressions to classify
-
-2. **Logical GP (Decision Tree)** × 30 runs
-   - Seeds: 2001-2030
-   - Nodes: IF/THEN/ELSE conditions
-   - Evolves decision trees to classify
-
-3. **Generates Comparison Table** with:
-   - Training Accuracy (% ± std dev)
-   - Test Accuracy (% ± std dev)
-   - F-measure (± std dev)
-   - Statistical T-test (two-tailed)
-
-## Output Format
-
+```bash
+java -jar GPClassifier.jar ../Breast_train.csv ../Breast_test.csv
 ```
+
+Windows example:
+
+```bash
+java -jar GPClassifier.jar C:\data\Breast_train.csv C:\data\Breast_test.csv
+```
+
+Linux/macOS example:
+
+```bash
+java -jar GPClassifier.jar ~/data/Breast_train.csv ~/data/Breast_test.csv
+```
+
+---
+
+# Example Execution
+
+```bash
+java -jar GPClassifier.jar
+```
+
+Output:
+
+```text
 === GP Breast Cancer Classifier: 30-Run Batch Comparison ===
 
-Training File: ../Breast_train.csv
-Test File:     ../Breast_test.csv
+Training File: Breast_train.csv
+Test File:     Breast_test.csv
+
+Enter base seed value: 1000
 
 === Loading Data ===
 Training samples: 297
@@ -70,11 +155,52 @@ Test samples: 86
   Progress: 10/30
   Progress: 20/30
   Progress: 30/30 ✓
+```
 
+---
 
+# Output Produced
+
+The program automatically executes:
+
+## 1. Symbolic GP (Arithmetic Classifier)
+
+Runs 30 independent experiments using arithmetic expressions.
+
+Operators used:
+
+- `+`
+- `−`
+- `×`
+- `÷`
+
+---
+
+## 2. Logical GP (Decision Tree)
+
+Runs 30 independent experiments using IF-THEN-ELSE decision structures.
+
+---
+
+## 3. Statistical Comparison
+
+The final report includes:
+
+- Mean Training Accuracy
+- Mean Test Accuracy
+- F-measure
+- Standard deviation
+- Two-tailed T-test
+
+---
+
+# Example Comparison Table
+
+```text
 ======================== COMPARISON TABLE (30 runs) ========================
+
 Metric                  | Symbolic   | Logical    | Difference
---------
+------------------------------------------------------------------------
 Training Accuracy (%)   |   83.47%   |   82.16%   |    1.31%
   ± Std Dev             |  ± 1.98%   |  ± 2.14%   |
 
@@ -83,99 +209,98 @@ Test Accuracy (%)       |   79.07%   |   81.40%   |    2.33%
 
 F-measure               |   0.6234   |   0.6891   |   0.0657
   ± Std Dev             |  ± 0.0451  |  ± 0.0389  |
+
 =========================================================================
-
-T-test on Test Accuracy: t = -2.1543
-(Two-tailed significance test between Symbolic and Logical)
-```
-
-## Performance
-
-- **Single Run**: ~60-120 seconds (100 generations)
-- **Total Runtime**: ~60-120 minutes (60 runs total)
-  - Symbolic: 30 runs × ~90s = ~45 min
-  - Logical: 30 runs × ~90s = ~45 min
-  - Plus data loading and table generation
-
-## Files Generated
-
-During execution:
-- `best_model.ser` - Serialized best individual (overwritten each run)
-
-## System Architecture
-
-```
-Main.java
-├── main(args[]) → Parses command-line paths
-├── run30ComparisonAuto() → Orchestrates 60 runs
-│   ├── Loop 1: 30× Symbolic GP with different seeds
-│   ├── Loop 2: 30× Logical GP with different seeds
-│   └── printComparisonTable() → Statistical summary
-
-GPEngine.java
-├── run(suppress) → 100-generation evolution
-├── getLastTrainAccuracy() → Returns training accuracy
-└── getLastRuntimeNs() → Returns runtime
-
-Supporting Classes:
-├── DataLoader.java → CSV parsing (9 features, binary labels)
-├── Individual.java → Fitness wrapper for trees
-├── Node.java (abstract) → Base class for all tree nodes
-├── MathNode.java → Arithmetic operators (+, −, ×, ÷)
-├── FeatureNode.java → Feature inputs (x[0]...x[8])
-├── ConstantNode.java → Numeric constants
-├── ConditionNode.java → IF-THEN-ELSE routing
-└── ClassLeafNode.java → Terminal outputs (0 or 1)
-```
-
-## Command-Line Arguments
-
-| Argument | Default | Purpose |
-|----------|---------|---------|
-| None | Uses defaults | Runs with `../Breast_train.csv`, `../Breast_test.csv` |
-| `train_path` | - | Custom training CSV path |
-| `train_path test_path` | - | Custom train AND test paths |
-
-## Error Handling
-
-If data files are not found:
-```
-Error: ../Breast_train.csv (No such file or directory)
-```
-
-Solution: Ensure CSV files are in the correct relative path, or provide absolute paths:
-```bash
-java Main /mnt/c/Users/socce/Documents/COS314/ASS3/Breast_train.csv \
-         /mnt/c/Users/socce/Documents/COS314/ASS3/Breast_test.csv
-```
-
-## Notes
-
-- **No interactive prompts** - Runs automatically with defaults
-- **No menu** - Directly executes Mode 4 (30-run comparison)
-- **Reproducible** - Fixed seed sequence (1001-1030, 2001-2030)
-- **Parallel-friendly** - Can run multiple instances with different seed offsets
-
-## Troubleshooting
-
-### Compilation fails
-```bash
-javac -version  # Check Java 8+
-javac *.java    # Compile all files
-```
-
-### File not found errors
-- Check working directory: `pwd` should show `.../Genetic-Programming-Assignment/src`
-- Verify CSV files exist: `ls ../Breast_train.csv ../Breast_test.csv`
-
-### Out of memory (rare)
-If processing large datasets:
-```bash
-java -Xmx4g Main
 ```
 
 ---
 
-**Author**: COS314 Assignment 3  
-**Language**: Java 1.8.0+  
-**Data**: Breast Cancer Wisconsin Dataset (9 features, 297 train / 86 test)
+# Runtime
+
+Approximate runtime:
+
+| Task | Time |
+|---|---|
+| Single GP run | ~60–120 seconds |
+| Full experiment | ~60–120 minutes |
+
+---
+
+# Files Generated
+
+During execution:
+
+```text
+best_model.ser
+```
+
+This file stores the best evolved model and is overwritten after each run.
+
+---
+
+# Optional JVM Memory Allocation
+
+For larger datasets or low-memory systems:
+
+```bash
+java -Xmx4g -jar GPClassifier.jar
+```
+
+---
+
+# Troubleshooting
+
+## Unable to access jarfile
+
+Ensure the JAR exists in the current directory.
+
+Linux/macOS:
+
+```bash
+ls
+```
+
+Windows:
+
+```cmd
+dir
+```
+
+---
+
+## CSV File Not Found
+
+Use absolute paths:
+
+```bash
+java -jar GPClassifier.jar \
+/path/to/Breast_train.csv \
+/path/to/Breast_test.csv
+```
+
+---
+
+# Dataset
+
+Breast Cancer Wisconsin Dataset
+
+- 9 input features
+- Binary classification
+- 297 training samples
+- 86 testing samples
+
+---
+
+# Technologies Used
+
+- Java 8+
+- Genetic Programming
+- Symbolic Evolution
+- Decision Tree Evolution
+- Statistical Analysis
+
+---
+
+# Author
+
+COS314 Assignment 3
