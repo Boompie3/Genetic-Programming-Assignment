@@ -1,160 +1,98 @@
 import java.io.*;
-import java.util.*;
+import java.util.Scanner;
 
 public class GPTestingSuite {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
-        // Assignment Constraint: Initial configurations via CLI parameters
-        System.out.print("Enter seed value: ");
+        System.out.println("=== GP Breast Cancer Testing & Evaluation ===");
+        
+        // 1. Request Assignment Constraints via CLI
+        System.out.print("Enter seed value (for logging/replication): ");
         long seed = scanner.nextLong();
         scanner.nextLine(); // Clear buffer
 
-        System.out.print("Enter filepath to the CSV file (e.g., Breast_test.csv): ");
-        String csvFilePath = scanner.nextLine();
+        System.out.print("Enter filepath to the unseen test data (e.g., Breast_test.csv): ");
+        String testDataPath = scanner.nextLine();
 
-        System.out.println("\nSelect Operational Mode:");
-        System.out.println("1 - [MOCK DEVELOPMENT MODE] (Run right now with a temporary dummy tree)");
-        System.out.println("2 - [PRODUCTION RUN MODE]   (Load actual model file from your partner)");
-        System.out.print("Choice: ");
-        int mode = scanner.nextInt();
-        scanner.nextLine();
+        System.out.print("Enter filepath to the trained serialized model (e.g., best_model.ser): ");
+        String modelPath = scanner.nextLine();
 
-        Node modelToTest = null;
-        boolean isDecisionTree = false;
+        System.out.println("Select Model Type you are evaluating:");
+        System.out.println("1. Symbolic (Arithmetic Classifier)");
+        System.out.println("2. Logical (Decision Tree)");
+        System.out.print("Choice (1 or 2): ");
+        int modelChoice = scanner.nextInt();
+        boolean isLogical = (modelChoice == 2);
 
-        if (mode == 1) {
-            System.out.println("\nChoose type of mock algorithm to evaluate:");
-            System.out.println("1 - Mock Arithmetic Classifier");
-            System.out.println("2 - Mock Decision Tree");
-            System.out.print("Choice: ");
-            int subChoice = scanner.nextInt();
-            
-                if (subChoice == 1) {
-                    modelToTest = generateMockArithmeticTree();
-                    isDecisionTree = false;
-                    System.out.println("\n--- Initializing Mock Arithmetic Testing Pipeline (Seed: " + seed + ") ---");
-                } else {
-                    modelToTest = generateMockDecisionTree();
-                    isDecisionTree = true;
-                    System.out.println("\n--- Initializing Mock Decision Tree Testing Pipeline (Seed: " + seed + ") ---");
-                }
-        } else {
-            System.out.print("Enter filepath to the trained serialized model (.ser): ");
-            String modelPath = scanner.nextLine();
-            
-            System.out.println("Is the model you are loading a Decision Tree? (y/n): ");
-            String typeChoice = scanner.nextLine().trim().toLowerCase();
-            isDecisionTree = typeChoice.equals("y");
-
-            try {
-                modelToTest = loadModel(modelPath);
-                System.out.println("\n--- Initializing Production Testing Pipeline (Seed: " + seed + ") ---");
-            } catch (Exception e) {
-                System.err.println("Failed to serialize model: " + e.getMessage());
-                scanner.close();
-                return;
-            }
-        }
+        System.out.println("\n--- Initializing Final Production Testing Pipeline (Seed: " + seed + ") ---");
 
         try {
-            // Load and parse the instances cleanly matching your exact dataset columns
-            List<InstanceData> testDataset = parseCSV(csvFilePath);
-            System.out.println("Data parsed successfully. Total processing instances: " + testDataset.size());
+            // 2. Load the Test Data using the partner's shared DataLoader
+            DataLoader testData = new DataLoader(testDataPath);
+            System.out.println("Test data parsed successfully. Total unseen instances: " + testData.labels.length);
 
-            // Run evaluation engine
-                executeClassification(modelToTest, testDataset, isDecisionTree);
+            // 3. Load the best trained model
+            Node bestModel = loadModel(modelPath);
+            System.out.println("Pre-trained model deserialized successfully.");
+
+            // 4. Run classification metrics
+            executeClassification(bestModel, testData, isLogical);
 
         } catch (IOException e) {
-            System.err.println("File System Error: " + e.getMessage());
+            System.err.println("File System Error: Could not locate file. " + e.getMessage());
+        } catch (ClassNotFoundException e) {
+            System.err.println("Deserialization Error: The model structure does not match. " + e.getMessage());
         } finally {
             scanner.close();
         }
     }
 
-    // Class to explicitly pair labels and features matching your specific CSV column offsets
-    private static class InstanceData {
-        int targetClass;     // Column 0
-        double[] features;   // Columns 1 to 9 (9 total attributes)
-
-        public InstanceData(int targetClass, double[] features) {
-            this.targetClass = targetClass;
-            this.features = features;
-        }
-    }
-
-    // Custom CSV parser handling your exact format where target is the first column
-    private static List<InstanceData> parseCSV(String path) throws IOException {
-        List<InstanceData> records = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
-            String line;
-            boolean isHeader = true;
-
-            while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) continue;
-                
-                // Skip text header row safely
-                if (isHeader && line.toLowerCase().contains("class")) {
-                    isHeader = false;
-                    continue;
-                }
-
-                String[] columns = line.split(",");
-                
-                // Column 0 is your classification category label (0 or 1)
-                int actualClass = Integer.parseInt(columns[0].trim());
-                
-                // Columns 1 to 9 are the 9 distinct processing attributes
-                double[] featureSet = new double[columns.length - 1];
-                for (int i = 1; i < columns.length; i++) {
-                    featureSet[i - 1] = Double.parseDouble(columns[i].trim());
-                }
-
-                records.add(new InstanceData(actualClass, featureSet));
-            }
-        }
-        return records;
-    }
-
     // Handles metric generations and clocks microsecond runtime
-    private static void executeClassification(Node tree, List<InstanceData> dataset, boolean isDecisionTree) {
+    private static void executeClassification(Node tree, DataLoader dataset, boolean isLogical) {
         int tp = 0, fp = 0, tn = 0, fn = 0;
 
-        // Nanosecond clock tracking initiation
+        // Start Nanosecond clock tracking
         long start = System.nanoTime();
 
-        for (InstanceData instance : dataset) {
-            double expressionOutput = tree.evaluate(instance.features);
-            int finalPrediction;
+        for (int i = 0; i < dataset.labels.length; i++) {
+            double expressionOutput = tree.evaluate(dataset.features[i]);
+            int predictedClass = 0;
 
-            if (isDecisionTree) {
-                // Decision trees natively output direct classification target paths (0.0 or 1.0)
-                finalPrediction = (expressionOutput >= 0.5) ? 1 : 0;
+            if (isLogical) {
+                // Decision trees output direct classification threshold paths
+                predictedClass = expressionOutput > 0.5 ? 1 : 0;
             } else {
-                // Arithmetic classifiers map outcomes around functional thresholds (>= 0 is class 1)
-                finalPrediction = (expressionOutput >= 0.0) ? 1 : 0;
+                // Symbolic models map outcomes through your partner's mathematical Sigmoid wrapper
+                predictedClass = (1.0 / (1.0 + Math.exp(-expressionOutput))) > 0.5 ? 1 : 0;
             }
 
-            // Confusion matrix calculation loop
-            if (instance.targetClass == 1 && finalPrediction == 1) tp++;
-            else if (instance.targetClass == 0 && finalPrediction == 1) fp++;
-            else if (instance.targetClass == 0 && finalPrediction == 0) tn++;
-            else if (instance.targetClass == 1 && finalPrediction == 0) fn++;
+            int actualClass = dataset.labels[i];
+
+            // Confusion matrix calculation
+            if (predictedClass == actualClass) {
+                if (actualClass == 1) tp++;
+                else tn++;
+            } else {
+                if (actualClass == 1) fn++;
+                else fp++;
+            }
         }
 
+        // End clock tracking
         long end = System.nanoTime();
         double executionTimeMs = (end - start) / 1_000_000.0;
 
         // Accuracy and F-Measure calculations
-        double accuracy = ((double)(tp + tn) / dataset.size()) * 100.0;
+        double testAccuracy = ((double)(tp + tn) / dataset.labels.length) * 100.0;
         double precision = (tp + fp) > 0 ? (double) tp / (tp + fp) : 0;
         double recall = (tp + fn) > 0 ? (double) tp / (tp + fn) : 0;
         double fMeasure = (precision + recall) > 0 ? 2.0 * ((precision * recall) / (precision + recall)) : 0.0;
 
         // Matches Table 2 reporting standards perfectly
         System.out.println("\n====================== RESULTS ======================");
-        System.out.printf("Test Accuracy: %.2f%%\n", accuracy);
+        System.out.printf("Test Accuracy: %.2f%%\n", testAccuracy);
         System.out.printf("F-measure:     %.4f\n", fMeasure);
         System.out.printf("Runtime:       %.2f ms\n", executionTimeMs);
         System.out.println("=====================================================");
@@ -162,27 +100,8 @@ public class GPTestingSuite {
 
     // Deserialization importer for final phase execution
     private static Node loadModel(String filepath) throws IOException, ClassNotFoundException {
-        try (java.io.ObjectInputStream ois = new java.io.ObjectInputStream(new java.io.FileInputStream(filepath))) {
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filepath))) {
             return (Node) ois.readObject();
         }
-    }
-
-    // Generates a mock arithmetic tree: (Feature_0 - Feature_2) * 2.5
-    private static Node generateMockArithmeticTree() {
-        MathNode mul = new MathNode("*");
-        MathNode sub = new MathNode("-");
-        sub.left = new FeatureNode(0);
-        sub.right = new FeatureNode(2);
-        mul.left = sub;
-        mul.right = new ConstantNode(2.5);
-        return mul;
-    }
-
-    // Generates a mock decision tree: If Feature_2 <= 4 then Class 0 else Class 1
-    private static Node generateMockDecisionTree() {
-        ConditionNode root = new ConditionNode(2, 4.0);
-        root.left = new ClassLeafNode(0);
-        root.right = new ClassLeafNode(1);
-        return root;
     }
 }
