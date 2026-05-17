@@ -21,7 +21,7 @@ public class GPTestingSuite {
         int mode = scanner.nextInt();
         scanner.nextLine();
 
-        GPNode modelToTest = null;
+        Node modelToTest = null;
         boolean isDecisionTree = false;
 
         if (mode == 1) {
@@ -31,15 +31,15 @@ public class GPTestingSuite {
             System.out.print("Choice: ");
             int subChoice = scanner.nextInt();
             
-            if (subChoice == 1) {
-                modelToTest = generateMockArithmeticTree();
-                isDecisionTree = false;
-                System.out.println("\n--- Initializing Mock Arithmetic Testing Pipeline (Seed: " + seed + ") ---");
-            } else {
-                modelToTest = generateMockDecisionTree();
-                isDecisionTree = true;
-                System.out.println("\n--- Initializing Mock Decision Tree Testing Pipeline (Seed: " + seed + ") ---");
-            }
+                if (subChoice == 1) {
+                    modelToTest = generateMockArithmeticTree();
+                    isDecisionTree = false;
+                    System.out.println("\n--- Initializing Mock Arithmetic Testing Pipeline (Seed: " + seed + ") ---");
+                } else {
+                    modelToTest = generateMockDecisionTree();
+                    isDecisionTree = true;
+                    System.out.println("\n--- Initializing Mock Decision Tree Testing Pipeline (Seed: " + seed + ") ---");
+                }
         } else {
             System.out.print("Enter filepath to the trained serialized model (.ser): ");
             String modelPath = scanner.nextLine();
@@ -64,7 +64,7 @@ public class GPTestingSuite {
             System.out.println("Data parsed successfully. Total processing instances: " + testDataset.size());
 
             // Run evaluation engine
-            executeClassification(modelToTest, testDataset, isDecisionTree);
+                executeClassification(modelToTest, testDataset, isDecisionTree);
 
         } catch (IOException e) {
             System.err.println("File System Error: " + e.getMessage());
@@ -118,7 +118,7 @@ public class GPTestingSuite {
     }
 
     // Handles metric generations and clocks microsecond runtime
-    private static void executeClassification(GPNode tree, List<InstanceData> dataset, boolean isDecisionTree) {
+    private static void executeClassification(Node tree, List<InstanceData> dataset, boolean isDecisionTree) {
         int tp = 0, fp = 0, tn = 0, fn = 0;
 
         // Nanosecond clock tracking initiation
@@ -161,27 +161,28 @@ public class GPTestingSuite {
     }
 
     // Deserialization importer for final phase execution
-    private static GPNode loadModel(String filepath) throws IOException, ClassNotFoundException {
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filepath))) {
-            return (GPNode) ois.readObject();
+    private static Node loadModel(String filepath) throws IOException, ClassNotFoundException {
+        try (java.io.ObjectInputStream ois = new java.io.ObjectInputStream(new java.io.FileInputStream(filepath))) {
+            return (Node) ois.readObject();
         }
     }
 
     // Generates a mock arithmetic tree: (Feature_0 - Feature_2) * 2.5
-    private static GPNode generateMockArithmeticTree() {
-        return new MulNode(
-            new SubNode(new FeatureNode(0), new FeatureNode(2)),
-            new ConstantNode(2.5)
-        );
+    private static Node generateMockArithmeticTree() {
+        MathNode mul = new MathNode("*");
+        MathNode sub = new MathNode("-");
+        sub.left = new FeatureNode(0);
+        sub.right = new FeatureNode(2);
+        mul.left = sub;
+        mul.right = new ConstantNode(2.5);
+        return mul;
     }
 
     // Generates a mock decision tree: If Feature_2 <= 4 then Class 0 else Class 1
-    private static GPNode generateMockDecisionTree() {
-        return new SplitNode(
-            2,            // Split on feature index 2 (tumor_size offset)
-            4.0,          // Threshold split metric
-            new ClassLabelNode(0), 
-            new ClassLabelNode(1)
-        );
+    private static Node generateMockDecisionTree() {
+        ConditionNode root = new ConditionNode(2, 4.0);
+        root.left = new ClassLeafNode(0);
+        root.right = new ClassLeafNode(1);
+        return root;
     }
 }
