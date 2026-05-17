@@ -13,6 +13,8 @@ public class GPEngine {
     boolean isLogical;
     
     List<Individual> population;
+    double lastTrainAccuracy = 0.0;
+    long lastRuntimeNs = 0;
     
     public GPEngine(long seed, DataLoader data, boolean isLogical) {
         this.random = new Random(seed);
@@ -21,7 +23,8 @@ public class GPEngine {
         this.population = new ArrayList<>();
     }
     
-    public void run() {
+    public void run(boolean suppress) {
+        long startTime = System.nanoTime();
         initializePopulation();
         
         for (int gen = 1; gen <= maxGenerations; gen++) {
@@ -30,27 +33,42 @@ public class GPEngine {
             
             Individual best = population.get(0);
             
-            System.out.printf("Generation %d | Best Fitness (Accuracy): %.4f | F-Measure: %.4f | Depth: %d\n", 
-                gen, best.fitness, best.getFMeasure(), best.root.getDepth());
-                
-            if (gen == 1 || gen == maxGenerations) {
-                System.out.println("Best Tree: " + best.root.toString());
+            if (!suppress) {
+                System.out.printf("Generation %d | Best Fitness (Accuracy): %.4f | F-Measure: %.4f | Depth: %d\n", 
+                    gen, best.fitness, best.getFMeasure(), best.root.getDepth());
+                    
+                if (gen == 1 || gen == maxGenerations) {
+                    System.out.println("Best Tree: " + best.root.toString());
+                }
             }
             
             if (best.fitness >= 1.0) {
-                System.out.println("Perfect solution found!");
+                if (!suppress) System.out.println("Perfect solution found!");
                 break;
             }
             
             population = createNextGeneration();
         }
+        
         // After evolution completes, serialize best model for testing/replication
         try {
             saveBestModel("best_model.ser");
-            System.out.println("Best model serialized to best_model.ser");
+            if (!suppress) System.out.println("Best model serialized to best_model.ser");
         } catch (Exception e) {
             System.err.println("Failed to save best model: " + e.getMessage());
         }
+        
+        long endTime = System.nanoTime();
+        lastTrainAccuracy = population.get(0).fitness * 100.0;
+        lastRuntimeNs = endTime - startTime;
+    }
+    
+    public double getLastTrainAccuracy() {
+        return lastTrainAccuracy;
+    }
+    
+    public long getLastRuntimeNs() {
+        return lastRuntimeNs;
     }
 
     // Serialize the current best individual's tree to a file
